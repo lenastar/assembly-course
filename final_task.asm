@@ -1,84 +1,139 @@
 .data
     result_msg: .asciz "It's for you: %d"
+    error_msg: .asciz "Uncorrect"
+    zero_mag: .asciz "Zero division"
 .text
 .global main
 main:
     movq %rsp, %rbp #for correct debugging
     xorq %rax, %rax
     
-    movq %rbx, %rbp
-    
-    movq (%rbx), %r10 #argc
-    xorq %r13, %r13 #счетчик
+    movq %rdx, %r12 #argv
+    movq %rcx, %r10 #argc
+    sub $1, %r10
+    xor %r13, %r13 #счетчик
     
 loop_calc:
-    movq 8(%rbp, %r13, 8), %rcx
-    call calc
+    movq 8(%r12, %r13, 8), %r11
+    jmp calc
+_continue_loop:
     inc %r13
     cmpq %r10, %r13
     jl loop_calc
     
+print:
     #вывод
-    movq $result_msg, %rcx
-    pop %rdx   
+    mov $result_msg, %rcx
+    pop %rdx 
+    mov (%rsp), %r10
+    cmp $0x4013a5, %r10
+    jne error
     call printf
-    ret
+    call exit
 
+print_zero:
+    mov $zero_mag, %rcx
+    call printf
+    call exit  
+      
+error:
+    mov $error_msg, %rcx
+    call printf
+    call exit
+    
 calc:
-    cmpq $0x2b, %rcx
+    xor %al, %al
+    mov (%r11), %al
+    
+    cmp $0x2b, %al
     je _add
     
-    cmpq $0x2a, %rcx
+    cmp $0x78, %al
     je _mul
     
-    cmpq $0x2f, %rcx
+    cmp $0x2f, %al
     je _div
     
-    cmpq $0x2d, %rcx
+    cmp $0x2d, %al
     je _sub
     
-    cmpq $0x2f, %rcx
-    jg _num
-    
-    cmpq $0x3a, %rcx
-    jl _num
-    
-    #error
+    xor %al, %al
+    jmp  _atoi
     
 _add:
-    xorq %rax, %rax
+    xor %rax, %rax
+    xor %r8, %r8
     pop %r8
     pop %rax
-    addq %r8, %rax
+    add %r8, %rax
     push %rax
-    ret
+    jmp _continue_loop 
     
 _mul:
-    xorq %rax, %rax
+    xor %rax, %rax
+    xor %r8, %r8
     pop %r8
     pop %rax
     imul %r8, %rax
     push %rax
-    ret
+    jmp _continue_loop 
     
 _div:
-    xorq %rax, %rax
-    movq $0, %rdx
+    xor %rax, %rax
+    xor %r8, %r8
+    mov $0, %rdx
     pop %r8
+    cmp $0, %r8
+    je print_zero
     pop %rax
     div %r8
     push %rax
-    ret
+    jmp _continue_loop 
  
 _sub:
-    xorq %rax, %rax
+    mov 1(%r11), %bl
+    cmp $0, %bl
+    jne _atoi 
+    xor %rax, %rax
+    xor %r8, %r8
     pop %r8
     pop %rax
     subq %r8, %rax
     push %rax
-    ret   
+    jmp _continue_loop   
 
 _num:
-    push %rcx
-    ret    
+    cmp $1, %bl
+    je __make_neg
+__cont_num: 
+    xor %bl, %bl
+    push %r15
+    jmp _continue_loop 
+
+_atoi:
+    mov $0, %r15 #previous
+__get_next:
+    mov (%r11), %r9b
+    cmp $0x2d, %r9
+    je __neg
+    cmp $0, %r9
+    je _num
+    sub $0x30, %r9
+    cmp $0, %r9
+    jl error
+    cmp $9, %r9
+    jg error
+    imul $10, %r15
+    add %r15, %r9
+    mov %r9, %r15
+    inc %r11
+    jmp __get_next    
+
+__neg:
+    mov $1, %bl  
+    inc %r11 
+    jmp __get_next
     
+__make_neg:
+    neg %r15
+    jmp __cont_num
